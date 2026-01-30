@@ -1,5 +1,6 @@
-from fastapi import FastAPI, Header, HTTPException
+from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.responses import HTMLResponse
+import json
 
 from detection import detect_scam
 from agent import agent_reply
@@ -16,65 +17,51 @@ CRITICAL_KEYWORDS = ["otp", "upi"]
 
 
 # -------------------------------------------------
-# ROOT LANDING PAGE (PROFESSIONAL & SIMPLE)
+# ROOT LANDING PAGE
 # -------------------------------------------------
 @app.get("/", response_class=HTMLResponse)
 def home():
     return """
     <!DOCTYPE html>
-    <html lang="en">
+    <html>
     <head>
-        <meta charset="UTF-8">
         <title>Agentic Honeypot API</title>
         <style>
             body {
-                margin: 0;
                 height: 100vh;
+                margin: 0;
                 display: flex;
                 justify-content: center;
                 align-items: center;
                 background: #f6f7fb;
-                font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto;
+                font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI";
             }
-            .card {
-                background: #ffffff;
-                padding: 40px 50px;
-                border-radius: 12px;
+            .box {
+                background: white;
+                padding: 40px;
+                border-radius: 10px;
                 box-shadow: 0 10px 25px rgba(0,0,0,0.08);
                 text-align: center;
             }
-            h1 {
-                margin: 0 0 10px 0;
-                font-size: 24px;
-            }
-            p {
-                margin: 0 0 25px 0;
-                color: #555;
-            }
-            a {
-                text-decoration: none;
-            }
             button {
-                padding: 12px 24px;
+                padding: 12px 22px;
                 font-size: 15px;
                 border: none;
                 border-radius: 6px;
-                background-color: #2563eb;
+                background: #2563eb;
                 color: white;
                 cursor: pointer;
             }
             button:hover {
-                background-color: #1e40af;
+                background: #1e40af;
             }
         </style>
     </head>
     <body>
-        <div class="card">
-            <h1>Agentic Honeypot API</h1>
+        <div class="box">
+            <h2>Agentic Honeypot API</h2>
             <p>AI-powered scam detection & intelligence extraction</p>
-            <a href="/docs">
-                <button>Open API Documentation</button>
-            </a>
+            <a href="/docs"><button>Open API Docs</button></a>
         </div>
     </body>
     </html>
@@ -86,29 +73,58 @@ def home():
 # -------------------------------------------------
 @app.post("/honeypot")
 async def honeypot_api(
-    payload: dict,
+    request: Request,
     x_api_key: str = Header(None)
 ):
-    # 1. API KEY AUTH
+    # -------------------------------------------------
+    # SMART-QUOTE SAFE JSON PARSING
+    # -------------------------------------------------
+    raw_body = await request.body()
+    body_str = raw_body.decode("utf-8")
+
+    body_str = (
+        body_str
+        .replace("“", "\"")
+        .replace("”", "\"")
+        .replace("‘", "'")
+        .replace("’", "'")
+    )
+
+    try:
+        payload = json.loads(body_str)
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail="Invalid JSON format")
+
+    # -------------------------------------------------
+    # API KEY AUTH
+    # -------------------------------------------------
     if x_api_key != API_KEY:
         raise HTTPException(status_code=401, detail="Invalid API key")
 
-    # 2. EXTRACT DATA
+    # -------------------------------------------------
+    # EXTRACT DATA
+    # -------------------------------------------------
     session_id = payload["sessionId"]
     incoming_text = payload["message"]["text"]
     text_lower = incoming_text.lower()
 
-    # 3. SESSION LOAD
+    # -------------------------------------------------
+    # SESSION LOAD
+    # -------------------------------------------------
     session = get_session(session_id)
     session["messages"].append(incoming_text)
 
     msg_count = len(session["messages"])
 
-    # 4. SCAM DETECTION (ML + RULES)
+    # -------------------------------------------------
+    # SCAM DETECTION (ML + RULES)
+    # -------------------------------------------------
     if not session["scam_detected"]:
         session["scam_detected"] = detect_scam(incoming_text)
 
-    # 5. STAGE DECISION (SMART + SCALABLE)
+    # -------------------------------------------------
+    # STAGE DECISION (SMART + SCALABLE)
+    # -------------------------------------------------
     if any(k in text_lower for k in LINK_KEYWORDS):
         session["stage"] = "exit"
     elif any(k in text_lower for k in CRITICAL_KEYWORDS) and msg_count >= 2:
@@ -123,7 +139,9 @@ async def honeypot_api(
         else:
             session["stage"] = "exit"
 
-    # 6. FINAL CALLBACK (ONLY ONCE)
+    # -------------------------------------------------
+    # FINAL CALLBACK (ONLY ONCE)
+    # -------------------------------------------------
     if (
         session["scam_detected"]
         and session["stage"] == "exit"
@@ -146,14 +164,18 @@ async def honeypot_api(
             "reply": "I will visit the bank branch and confirm this."
         }
 
-    # 7. AGENT RESPONSE
+    # -------------------------------------------------
+    # AGENT RESPONSE
+    # -------------------------------------------------
     if session["scam_detected"]:
         last_msg = session["messages"][-1]
         reply = agent_reply(session["stage"], last_msg)
     else:
         reply = "Thank you for the information."
 
-    # 8. RESPONSE
+    # -------------------------------------------------
+    # RESPONSE
+    # -------------------------------------------------
     return {
         "status": "success",
         "reply": reply
