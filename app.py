@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Header, HTTPException, Request
+from fastapi import FastAPI, Header, HTTPException, Request, Body
 from fastapi.responses import HTMLResponse
 import json
 
@@ -74,26 +74,27 @@ def home():
 @app.post("/honeypot")
 async def honeypot_api(
     request: Request,
+    payload: dict = Body(...),   # <-- for Swagger UI
     x_api_key: str = Header(None)
 ):
     # -------------------------------------------------
     # SMART-QUOTE SAFE JSON PARSING
     # -------------------------------------------------
     raw_body = await request.body()
-    body_str = raw_body.decode("utf-8")
 
-    body_str = (
-        body_str
-        .replace("“", "\"")
-        .replace("”", "\"")
-        .replace("‘", "'")
-        .replace("’", "'")
-    )
-
-    try:
-        payload = json.loads(body_str)
-    except json.JSONDecodeError:
-        raise HTTPException(status_code=400, detail="Invalid JSON format")
+    if raw_body:
+        body_str = raw_body.decode("utf-8")
+        body_str = (
+            body_str
+            .replace("“", "\"")
+            .replace("”", "\"")
+            .replace("‘", "'")
+            .replace("’", "'")
+        )
+        try:
+            payload = json.loads(body_str)
+        except json.JSONDecodeError:
+            raise HTTPException(status_code=400, detail="Invalid JSON format")
 
     # -------------------------------------------------
     # API KEY AUTH
