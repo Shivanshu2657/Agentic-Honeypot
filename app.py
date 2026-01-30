@@ -1,6 +1,5 @@
 from fastapi import FastAPI, Header, HTTPException, Request, Body
 from fastapi.responses import HTMLResponse
-import json
 import uuid
 from datetime import datetime
 
@@ -13,31 +12,74 @@ from config import API_KEY
 
 app = FastAPI()
 
-# High-risk content triggers
+# Risk triggers
 LINK_KEYWORDS = ["http", "https", "link"]
 CRITICAL_KEYWORDS = ["otp", "upi"]
 
 
 # -------------------------------------------------
-# ROOT LANDING PAGE (Human Friendly Only)
+# LANDING PAGE (Professional, Human-Friendly)
 # -------------------------------------------------
 @app.get("/", response_class=HTMLResponse)
 def home():
     return """
+    <!DOCTYPE html>
     <html>
-    <head><title>Agentic Honeypot API</title></head>
-    <body style="font-family:Arial;text-align:center;padding-top:50px;">
-        <h2>Agentic Honeypot API</h2>
-        <p>API-first scam detection & intelligence extraction system</p>
-        <p><a href="/docs">Open API Docs</a></p>
-        <p><a href="/chat">Demo UI (Human Testing Only)</a></p>
+    <head>
+        <title>Agentic Honeypot API</title>
+        <style>
+            body {
+                font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI";
+                background: #f6f7fb;
+                height: 100vh;
+                margin: 0;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+            }
+            .card {
+                background: white;
+                padding: 40px;
+                border-radius: 10px;
+                box-shadow: 0 10px 25px rgba(0,0,0,0.08);
+                width: 360px;
+                text-align: center;
+            }
+            h2 { margin-bottom: 10px; }
+            p { color: #555; font-size: 14px; margin-bottom: 25px; }
+            a {
+                display: block;
+                margin: 10px 0;
+                padding: 12px;
+                border-radius: 6px;
+                text-decoration: none;
+                font-size: 14px;
+                background: #2563eb;
+                color: white;
+            }
+            a.secondary {
+                background: #e5e7eb;
+                color: #111;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="card">
+            <h2>Agentic Honeypot API</h2>
+            <p>
+                AI-powered scam detection & intelligence extraction.<br>
+                API-first. Evaluation-ready.
+            </p>
+            <a href="/docs">Open API Documentation</a>
+            <a href="/chat" class="secondary">Demo UI (Human Testing Only)</a>
+        </div>
     </body>
     </html>
     """
 
 
 # -------------------------------------------------
-# MAIN EVALUATION ENDPOINT (DO NOT CHANGE)
+# MAIN EVALUATION ENDPOINT (AUTHORITATIVE)
 # -------------------------------------------------
 @app.post("/honeypot")
 async def honeypot_api(
@@ -45,35 +87,24 @@ async def honeypot_api(
     payload: dict = Body(...),
     x_api_key: str = Header(None)
 ):
-    # -------------------------------------------------
-    # API KEY AUTH (MANDATORY)
-    # -------------------------------------------------
+    # API key auth
     if x_api_key != API_KEY:
         raise HTTPException(status_code=401, detail="Invalid API key")
 
-    # -------------------------------------------------
-    # EXTRACT DATA
-    # -------------------------------------------------
     session_id = payload["sessionId"]
     incoming_text = payload["message"]["text"]
     text_lower = incoming_text.lower()
 
-    # -------------------------------------------------
-    # SESSION LOAD
-    # -------------------------------------------------
+    # Load session
     session = get_session(session_id)
     session["messages"].append(incoming_text)
     msg_count = len(session["messages"])
 
-    # -------------------------------------------------
-    # SCAM DETECTION
-    # -------------------------------------------------
+    # Scam detection
     if not session["scam_detected"]:
         session["scam_detected"] = detect_scam(incoming_text)
 
-    # -------------------------------------------------
-    # STAGE DECISION
-    # -------------------------------------------------
+    # Stage logic
     if any(k in text_lower for k in LINK_KEYWORDS):
         session["stage"] = "exit"
     elif any(k in text_lower for k in CRITICAL_KEYWORDS) and msg_count >= 2:
@@ -88,9 +119,7 @@ async def honeypot_api(
         else:
             session["stage"] = "exit"
 
-    # -------------------------------------------------
-    # FINAL CALLBACK (MANDATORY, ONLY ONCE)
-    # -------------------------------------------------
+    # Mandatory final callback (only once)
     if (
         session["scam_detected"]
         and session["stage"] == "exit"
@@ -113,9 +142,7 @@ async def honeypot_api(
             "reply": "I will visit the bank branch and confirm this."
         }
 
-    # -------------------------------------------------
-    # AGENT RESPONSE
-    # -------------------------------------------------
+    # Agent reply
     if session["scam_detected"]:
         reply = agent_reply(session["stage"], incoming_text)
     else:
@@ -183,18 +210,32 @@ def chat_demo_ui():
 
 
 # -------------------------------------------------
-# DEMO → API BRIDGE
+# DEMO UI → API BRIDGE (FIXED WITH CONTEXT)
 # -------------------------------------------------
 @app.post("/chat/send")
 async def chat_send(payload: dict):
+    session_id = payload["sessionId"]
+    text = payload["text"]
+
+    # Use SAME session memory as /honeypot
+    session = get_session(session_id)
+
+    conversation_history = []
+    for msg in session["messages"]:
+        conversation_history.append({
+            "sender": "scammer",
+            "text": msg,
+            "timestamp": datetime.utcnow().isoformat() + "Z"
+        })
+
     honeypot_payload = {
-        "sessionId": payload["sessionId"],
+        "sessionId": session_id,
         "message": {
             "sender": "scammer",
-            "text": payload["text"],
+            "text": text,
             "timestamp": datetime.utcnow().isoformat() + "Z"
         },
-        "conversationHistory": [],
+        "conversationHistory": conversation_history,
         "metadata": {
             "channel": "DemoUI",
             "language": "English",
