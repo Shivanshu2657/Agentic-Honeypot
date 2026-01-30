@@ -1,8 +1,8 @@
-API_KEY = "shivanshu-honeypot-key"
+import os
 
-SCAM_KEYWORDS = [
-    "blocked", "verify", "urgent", "upi", "account",
-    "suspend", "otp", "click", "link"
-]
+API_KEY = os.getenv("API_KEY", "shivanshu-honeypot-key")
 
-GUVI_CALLBACK_URL = "https://hackathon.guvi.in/api/updateHoneyPotFinalResult"
+GUVI_CALLBACK_URL = os.getenv(
+    "GUVI_CALLBACK_URL",
+    "https://hackathon.guvi.in/api/updateHoneyPotFinalResult"
+)
